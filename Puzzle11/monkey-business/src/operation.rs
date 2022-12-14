@@ -11,6 +11,9 @@ pub enum Operator {
     Add,
     Multiply,
 }
+
+// This used to be a recursive structure, however, as rounds went by cloning became too expensive
+// and also, we no longer required the numbers or being able to compute the numbers
 #[derive(Debug, Clone)]
 pub enum LazyOperation {
     Number(HashMap<Item, Item>),
@@ -36,24 +39,9 @@ impl LazyOperation {
 
     pub fn is_divisible_by(&self, x: Item) -> bool {
         match self {
-            Self::Number(modulos) => {
-                if let Some(modulo) = modulos.get(&x) {
-                    return *modulo == 0;
-                }
-                false
-            }
-            Self::Add(modulos) => {
-                if let Some(modulo) = modulos.get(&x) {
-                    return *modulo == 0;
-                }
-                false
-            }
-            Self::Multiply(modulos) => {
-                if let Some(modulo) = modulos.get(&x) {
-                    return *modulo == 0;
-                }
-                false
-            }
+            Self::Number(modulos) => Self::get_precomputed_divisibility(modulos, x),
+            Self::Add(modulos) => Self::get_precomputed_divisibility(modulos, x),
+            Self::Multiply(modulos) => Self::get_precomputed_divisibility(modulos, x),
         }
     }
     pub fn get_computed_modulos(&self) -> &HashMap<Item, Item> {
@@ -62,6 +50,13 @@ impl LazyOperation {
             Self::Add(modulos) => modulos,
             Self::Multiply(modulos) => modulos,
         }
+    }
+
+    fn get_precomputed_divisibility(modulos: &HashMap<u64, u64>, x: u64) -> bool {
+        if let Some(modulo) = modulos.get(&x) {
+            return *modulo == 0;
+        }
+        false
     }
 }
 
