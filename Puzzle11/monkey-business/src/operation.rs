@@ -13,9 +13,9 @@ pub enum Operator {
 }
 #[derive(Debug, Clone)]
 pub enum LazyOperation {
-    Number(Item, HashMap<Item, Item>),
-    Add(Box<LazyOperation>, Box<LazyOperation>, HashMap<Item, Item>),
-    Multiply(Box<LazyOperation>, Box<LazyOperation>, HashMap<Item, Item>),
+    Number(HashMap<Item, Item>),
+    Add(HashMap<Item, Item>),
+    Multiply(HashMap<Item, Item>),
 }
 
 #[derive(Debug, Clone)]
@@ -31,50 +31,36 @@ impl LazyOperation {
         for item in modulo_options.iter() {
             modulos.insert(*item, x % *item);
         }
-        Box::new(Self::Number(x, modulos))
+        Box::new(Self::Number(modulos))
     }
 
-    pub fn unwrap(&self) -> Item {
-        match self {
-            Self::Number(value, _) => *value,
-            Self::Add(v1, v2, _) => v1.unwrap() + v2.unwrap(),
-            Self::Multiply(v1, v2, _) => v1.unwrap() * v2.unwrap(),
-        }
-    }
     pub fn is_divisible_by(&self, x: Item) -> bool {
         match self {
-            Self::Number(v, modulos) => {
+            Self::Number(modulos) => {
                 if let Some(modulo) = modulos.get(&x) {
                     return *modulo == 0;
                 }
-                *v % x == 0
+                false
             }
-            Self::Add(_, _, modulos) => {
+            Self::Add(modulos) => {
                 if let Some(modulo) = modulos.get(&x) {
                     return *modulo == 0;
                 }
-                self.get_modulo(x) == 0
+                false
             }
-            Self::Multiply(v1, v2, modulos) => {
+            Self::Multiply(modulos) => {
                 if let Some(modulo) = modulos.get(&x) {
                     return *modulo == 0;
                 }
-                v2.is_divisible_by(x) || v1.is_divisible_by(x)
+                false
             }
-        }
-    }
-    fn get_modulo(&self, x: Item) -> Item {
-        match self {
-            Self::Number(v, _) => *v % x,
-            Self::Add(v1, v2, _) => (v1.get_modulo(x) + v2.get_modulo(x)) % x,
-            Self::Multiply(v1, v2, _) => (v1.get_modulo(x) * v2.get_modulo(x)) % x,
         }
     }
     pub fn get_computed_modulos(&self) -> &HashMap<Item, Item> {
         match self {
-            Self::Number(_, modulos) => modulos,
-            Self::Add(_, _, modulos) => modulos,
-            Self::Multiply(_, _, modulos) => modulos,
+            Self::Number(modulos) => modulos,
+            Self::Add(modulos) => modulos,
+            Self::Multiply(modulos) => modulos,
         }
     }
 }
@@ -97,6 +83,7 @@ impl BinaryOperation {
     ) -> Box<LazyOperation> {
         let operand1 = self.get_operand_value(self.operand1, x, modulo_options);
         let operand2 = self.get_operand_value(self.operand2, x, modulo_options);
+        // we don't care about the new values themselves, we only care about the modulos
         match self.operator {
             Operator::Add => {
                 let mut sum_modulo = HashMap::new();
@@ -110,7 +97,7 @@ impl BinaryOperation {
                         }
                     }
                 }
-                Box::new(LazyOperation::Add(operand1, operand2, sum_modulo))
+                Box::new(LazyOperation::Add(sum_modulo))
             }
             Operator::Multiply => {
                 let mut multiply_modulo = HashMap::new();
@@ -124,7 +111,7 @@ impl BinaryOperation {
                         }
                     }
                 }
-                Box::new(LazyOperation::Multiply(operand1, operand2, multiply_modulo))
+                Box::new(LazyOperation::Multiply(multiply_modulo))
             }
         }
     }

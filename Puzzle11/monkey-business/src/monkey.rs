@@ -2,7 +2,6 @@ use super::item_test::MonkeyTest;
 use super::operation::{BinaryOperation, Item, LazyOperation};
 use std::collections::VecDeque;
 
-const WORRY_REDUCTION_LEVEL: f64 = 3.0;
 struct MovedItem {
     monkey_id: usize,
     item: Box<LazyOperation>,
@@ -11,7 +10,6 @@ pub struct Monkeys {
     monkeys: Vec<Monkey>,
     rounds: u32,
     total_rounds: u32,
-    is_worry_reduced: bool,
 }
 #[derive(Debug, Clone)]
 pub struct Monkey {
@@ -49,16 +47,9 @@ impl Monkey {
             tests_divisible_by: tests_divisible_by.clone(),
         }
     }
-    fn execute_operation(&mut self, can_reduce_worry: bool) -> Option<MovedItem> {
+    fn execute_operation(&mut self) -> Option<MovedItem> {
         if let Some(item) = self.items.pop_front() {
-            let mut new_value = self.operation.execute(&item, &self.tests_divisible_by);
-            if can_reduce_worry {
-                let less_worry_value =
-                    (new_value.unwrap() as f64 / WORRY_REDUCTION_LEVEL).floor() as u64;
-                new_value =
-                    LazyOperation::create_number(less_worry_value, &self.tests_divisible_by);
-            }
-
+            let new_value = self.operation.execute(&item, &self.tests_divisible_by);
             let next_monkey = self.test.execute(&new_value);
             self.inspected_items += 1;
             return Some(MovedItem::new(next_monkey, new_value));
@@ -76,17 +67,16 @@ impl Monkey {
     }
 }
 impl Monkeys {
-    pub fn new(total_rounds: u32, monkeys: Vec<Monkey>, is_worry_reduced: bool) -> Self {
+    pub fn new(total_rounds: u32, monkeys: Vec<Monkey>) -> Self {
         Self {
             monkeys,
             rounds: 0,
             total_rounds,
-            is_worry_reduced,
         }
     }
     pub fn execute_round(&mut self) {
         for i in 0..self.monkeys.len() {
-            while let Some(moved_item) = self.monkeys[i].execute_operation(self.is_worry_reduced) {
+            while let Some(moved_item) = self.monkeys[i].execute_operation() {
                 assert!(
                     moved_item.monkey_id < self.monkeys.len(),
                     "Invalid monkey id"
@@ -108,9 +98,9 @@ impl Monkeys {
     pub fn total_rounds(&self) -> u32 {
         self.total_rounds
     }
-    pub fn monkey_business(&self) -> u32 {
+    pub fn monkey_business(&self) -> u128 {
         let ordered_monkeys = self.get_ordered_monkeys();
         assert!(ordered_monkeys.len() >= 2, "Too few monkeys");
-        ordered_monkeys[0].inspected_items * ordered_monkeys[1].inspected_items
+        ordered_monkeys[0].inspected_items as u128 * ordered_monkeys[1].inspected_items as u128
     }
 }

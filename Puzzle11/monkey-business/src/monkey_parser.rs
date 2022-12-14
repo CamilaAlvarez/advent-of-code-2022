@@ -3,11 +3,7 @@ use super::monkey::{Monkey, Monkeys};
 use super::operation::{BinaryOperation, Item};
 use regex::Regex;
 
-pub fn parse_monkeys_from_string(
-    monkeys_content: String,
-    max_rounds: u32,
-    is_worry_reduced: bool,
-) -> Monkeys {
+pub fn parse_monkeys_from_string(monkeys_content: String, max_rounds: u32) -> Monkeys {
     let mut monkeys = vec![];
     let mut monkey_data = vec![];
     let mut tests_divisible_by = vec![];
@@ -26,7 +22,7 @@ pub fn parse_monkeys_from_string(
         create_monkey(&mut monkey_data, &mut monkeys, &tests_divisible_by);
     }
     create_monkey(&mut monkey_data, &mut monkeys, &tests_divisible_by);
-    Monkeys::new(max_rounds, monkeys, is_worry_reduced)
+    Monkeys::new(max_rounds, monkeys)
 }
 
 fn create_monkey(
