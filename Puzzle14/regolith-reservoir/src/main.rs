@@ -8,6 +8,8 @@ use std::fs;
 struct Args {
     #[arg(short, long)]
     input: String,
+    #[arg(action, short, long)]
+    use_infinite_floor: bool,
 }
 fn main() {
     const SOURCE_POINT: Point = (500, 0);
@@ -38,7 +40,13 @@ fn main() {
     );
     let top_left = (x_min, SOURCE_POINT.1);
     let bottom_right = (x_max, y_max);
-    let mut cave = Cave::new(top_left, SOURCE_POINT, bottom_right, &lines);
+    let mut cave = Cave::new(
+        top_left,
+        SOURCE_POINT,
+        bottom_right,
+        &lines,
+        args.use_infinite_floor,
+    );
     cave.flood_sand();
 
     println!(
