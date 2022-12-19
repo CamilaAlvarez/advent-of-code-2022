@@ -2,13 +2,13 @@ use super::distance::Point;
 use super::sensor::{Beacon, Sensor, SensorsReachMap};
 use regex::Regex;
 
-pub fn parse_map(file_content: String, y: i32) -> SensorsReachMap {
+pub fn parse_map(file_content: String, y: i32, locate_beacon: bool) -> SensorsReachMap {
     // TODO: handle error case
     let re = Regex::new(
         r"Sensor at x=(-?[0-9]+), y=(-?[0-9]+): closest beacon is at x=(-?[0-9]+), y=(-?[0-9]+)",
     )
     .unwrap();
-    let mut reach_map = SensorsReachMap::new(y);
+    let mut reach_map = SensorsReachMap::new(y, locate_beacon);
     for cap in re.captures_iter(&file_content) {
         let x_sensor = &cap[1].parse::<i32>().unwrap();
         let y_sensor = &cap[2].parse::<i32>().unwrap();
