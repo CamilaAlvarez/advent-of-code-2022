@@ -1,19 +1,11 @@
-use std::collections::HashMap;
+use std::ops;
 
 use super::distance::Point;
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Location {
-    ImpossibleBeaconLocation,
-    Beacon,
-    Sensor,
-}
-struct MapPosition {
-    location: Location,
-    position: Point,
-}
 
 pub struct SensorsReachMap {
-    sensor_map: HashMap<i32, Vec<MapPosition>>,
+    sensors_ranges: Option<ops::RangeInclusive<i32>>,
+    occupied_spots: Vec<Point>,
+    y: i32,
 }
 
 pub struct Beacon {
@@ -25,54 +17,59 @@ pub struct Sensor {
 }
 
 impl SensorsReachMap {
-    pub fn new(sensors: &Vec<Sensor>) -> Self {
-        let mut sensor_map = HashMap::new();
-        Self::fill_map(&mut sensor_map, sensors);
-        Self { sensor_map }
+    pub fn new(y: i32) -> Self {
+        Self {
+            sensors_ranges: None,
+            occupied_spots: vec![],
+            y,
+        }
     }
-    pub fn number_no_possible_beacon_location(&self, row: i32) -> Option<usize> {
-        if let Some(row) = self.sensor_map.get(&row) {
-            return Some(
-                row.iter()
-                    .filter(|map_position| {
-                        map_position.location == Location::ImpossibleBeaconLocation
-                    })
-                    .collect::<Vec<_>>()
-                    .len(),
-            );
+    pub fn add_sensor(&mut self, sensor: &Sensor) {
+        if !self.occupied_spots.contains(&sensor.position) && sensor.position.y() == self.y {
+            self.occupied_spots.push(sensor.position);
+        }
+        if !self
+            .occupied_spots
+            .contains(&sensor.closest_beacon.position)
+            && sensor.closest_beacon.position.y() == self.y
+        {
+            self.occupied_spots.push(sensor.closest_beacon.position);
+        }
+        if let Some(range) = sensor.horizontal_ranges_with_impossible_beacons(self.y) {
+            if let Some(sensors_range) = &self.sensors_ranges {
+                self.sensors_ranges = Some(Self::merge_ranges(&sensors_range, &range));
+            } else {
+                self.sensors_ranges = Some(range);
+            }
+        }
+    }
+    pub fn number_no_possible_beacon_location(&self) -> Option<usize> {
+        let mut occupied_points_in_range = 0;
+        if let Some(range) = &self.sensors_ranges {
+            for point in self.occupied_spots.iter() {
+                if point.y() == self.y && range.contains(&point.x()) {
+                    occupied_points_in_range += 1;
+                }
+            }
+            let elements_in_range = range.clone().collect::<Vec<_>>().len();
+            return Some(elements_in_range - occupied_points_in_range);
         }
         None
     }
-    fn fill_map(sensor_map: &mut HashMap<i32, Vec<MapPosition>>, sensors: &Vec<Sensor>) {
-        for sensor in sensors.iter() {
-            let points = sensor.points_with_impossible_beacons();
-            Self::set_value_in_map(sensor_map, sensor.position, Location::Sensor);
-            Self::set_value_in_map(sensor_map, sensor.closest_beacon.position, Location::Beacon);
-            for point in points.iter() {
-                Self::set_value_in_map(
-                    sensor_map,
-                    point.clone(),
-                    Location::ImpossibleBeaconLocation,
-                );
-            }
+
+    fn merge_ranges(
+        current_range: &ops::RangeInclusive<i32>,
+        other: &ops::RangeInclusive<i32>,
+    ) -> ops::RangeInclusive<i32> {
+        let mut start = current_range.start();
+        let mut end = current_range.end();
+        if other.start() < start {
+            start = other.start();
         }
-    }
-    fn set_value_in_map(
-        sensor_map: &mut HashMap<i32, Vec<MapPosition>>,
-        position: Point,
-        value: Location,
-    ) {
-        let map_position = MapPosition {
-            location: value,
-            position: position,
-        };
-        if let Some(row) = sensor_map.get_mut(&position.y()) {
-            if !row.contains(&map_position) {
-                row.push(map_position);
-            }
-        } else {
-            sensor_map.insert(position.y(), vec![]);
+        if other.end() > end {
+            end = other.end();
         }
+        ops::RangeInclusive::new(*start, *end)
     }
 }
 
@@ -95,71 +92,31 @@ impl Sensor {
             closest_beacon: beacon,
         }
     }
-    pub fn ranges_with_impossible_beacons(&self) -> Vec<Point> {
+    pub fn horizontal_ranges_with_impossible_beacons(
+        &self,
+        y: i32,
+    ) -> Option<ops::RangeInclusive<i32>> {
         let distance_beacon = self.position.distance(self.closest_beacon.position);
-        let mut points = vec![];
         let min_row = self.position.y() - distance_beacon;
-        let max_row = self.position.y() + distance_beacon;
-        let min_col = self.position.x() - distance_beacon;
-        let max_col = self.position.x() + distance_beacon;
 
-        // add top-right cuadrant
-        for i in self.position.x()..=max_col {
-            // we move i to be zero-based
-            let adapted_i = i - self.position.x();
-            for j in min_row + adapted_i..=self.position.y() {
-                let point = Point::new(i, j);
-                if point == self.position {
-                    continue;
-                }
-                points.push(point);
+        for row in 0..=distance_beacon {
+            if min_row + row != y {
+                continue;
             }
+            return Some(ops::RangeInclusive::new(
+                self.position.x() - row,
+                self.position.x() + row,
+            ));
         }
-        // add bottom-right corner
-        for i in self.position.x()..=max_col {
-            // we move i to be zero-based
-            let adapted_i = i - self.position.x();
-            for j in self.position.y() + 1..=max_row - adapted_i {
-                let point = Point::new(i, j);
-                if point == self.position {
-                    continue;
-                }
-                points.push(point);
+        for row in 1..=distance_beacon {
+            if self.position.y() + row != y {
+                continue;
             }
+            return Some(ops::RangeInclusive::new(
+                self.position.x() - distance_beacon + row,
+                self.position.x() + distance_beacon - row,
+            ));
         }
-
-        // add bottom-left corner
-        for i in min_col..self.position.x() {
-            // we move i to be zero-based
-            let adapted_i = i - min_col;
-            for j in self.position.y()..=self.position.y() + adapted_i {
-                let point = Point::new(i, j);
-                if point == self.position {
-                    continue;
-                }
-                points.push(point);
-            }
-        }
-
-        // add top-left cuadrant
-        for i in min_col + 1..self.position.x() {
-            // we move i to be zero-based
-            let adapted_i = i - min_col;
-            for j in self.position.y() - adapted_i..self.position.y() {
-                let point = Point::new(i, j);
-                if point == self.position {
-                    continue;
-                }
-                points.push(point);
-            }
-        }
-
-        points
-    }
-}
-
-impl PartialEq for MapPosition {
-    fn eq(&self, other: &Self) -> bool {
-        self.position == other.position
+        None
     }
 }

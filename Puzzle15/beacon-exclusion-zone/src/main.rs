@@ -14,8 +14,8 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let file_content = fs::read_to_string(args.input).unwrap();
-    let sensor_map = parse_map(file_content);
-    let unavailable_tiles_at_y = sensor_map.number_no_possible_beacon_location(args.y);
+    let sensor_map = parse_map(file_content, args.y);
+    let unavailable_tiles_at_y = sensor_map.number_no_possible_beacon_location();
 
     if let Some(unavailable_tiles) = unavailable_tiles_at_y {
         println!(
