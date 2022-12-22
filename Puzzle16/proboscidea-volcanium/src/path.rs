@@ -1,5 +1,9 @@
 use super::valve::Valve;
-use std::{cell::RefCell, collections::BinaryHeap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BinaryHeap, HashMap},
+    rc::Rc,
+};
 
 #[derive(PartialEq, Eq)]
 struct State {
@@ -9,11 +13,23 @@ struct State {
     position: Rc<RefCell<Valve>>,
     opened_valves: Vec<String>,
     previous_valve_name: Option<String>,
+    steps: Vec<String>,
 }
 
-pub fn get_best_path(start: &Rc<RefCell<Valve>>, max_time: i32) -> Option<i32> {
+pub fn get_best_path(
+    start: &Rc<RefCell<Valve>>,
+    valves: &Vec<Rc<RefCell<Valve>>>,
+    max_time: i32,
+) -> Option<i32> {
     // Binary heaps by default are max-heaps
     let mut heap = BinaryHeap::new();
+    let mut most_value_per_minute_at = HashMap::new();
+    for valve in valves.iter() {
+        let borrowed_valve = valve.borrow();
+        most_value_per_minute_at.insert(borrowed_valve.name(), i32::MIN);
+    }
+    let borrowed_start = start.borrow();
+    //most_value_per_minute_at.insert(borrowed_start.name(), 0);
     heap.push(State {
         time: 0,
         total_value: 0,
@@ -21,6 +37,7 @@ pub fn get_best_path(start: &Rc<RefCell<Valve>>, max_time: i32) -> Option<i32> {
         position: Rc::clone(start),
         opened_valves: vec![],
         previous_valve_name: None,
+        steps: vec![borrowed_start.name()],
     });
     // All performed operations must be included in the heap, we just try to maximize the score obtained by increasing the timer 30 times
     while let Some(State {
@@ -30,6 +47,7 @@ pub fn get_best_path(start: &Rc<RefCell<Valve>>, max_time: i32) -> Option<i32> {
         position,
         opened_valves,
         previous_valve_name,
+        steps,
     }) = heap.pop()
     {
         if time >= max_time {
@@ -42,56 +60,50 @@ pub fn get_best_path(start: &Rc<RefCell<Valve>>, max_time: i32) -> Option<i32> {
                 if let Some(previous_valve) = &previous_valve_name {
                     check_opened_valves.push(previous_valve.clone());
                 }
-                let neighbors_available_flow =
-                    position_ref.neighbors_remaining_flow(&check_opened_valves);
-                if neighbors_available_flow < position_ref.flow_rate() {
-                    let mut opened_valves = opened_valves.clone();
-                    opened_valves.push(position_ref.name());
-                    heap.push(State {
-                        time: time + 1,
-                        total_value: total_value + value_per_minute,
-                        value_per_minute: value_per_minute + position_ref.flow_rate(),
-                        position: Rc::clone(&position),
-                        opened_valves,
-                        previous_valve_name: previous_valve_name.clone(),
-                    });
+                let mut new_steps = steps.clone();
+                new_steps.push(position_ref.name());
+                if let Some(value_per_minute_at) =
+                    most_value_per_minute_at.get(&position_ref.name())
+                {
+                    if *value_per_minute_at <= total_value + value_per_minute {
+                        let mut opened_valves = opened_valves.clone();
+                        opened_valves.push(position_ref.name());
+                        heap.push(State {
+                            time: time + 1,
+                            total_value: total_value + value_per_minute,
+                            value_per_minute: value_per_minute + position_ref.flow_rate(),
+                            position: Rc::clone(&position),
+                            opened_valves,
+                            previous_valve_name: previous_valve_name.clone(),
+                            steps: new_steps,
+                        });
+                    }
+                    //}
                 }
             }
-            // Or we can move to the best neighbor
-            // we place both alternatives, by adding them to the heap we will end up extracting the one that maximizes the pressure
-            let mut neighbors_with_max_flow = vec![];
-            let mut current_max_flow = i32::MIN;
+            // Or we can move to the best neighbor we place both alternatives
             for neighbor in position_ref.neighbors().iter() {
                 if let Some(neighbor) = neighbor.upgrade() {
                     let neighbor_ref = neighbor.borrow();
-                    // we try to avoid meaningless cycles unless there is no other way
-                    if let Some(previous) = &previous_valve_name {
-                        if *previous == neighbor_ref.name() && position_ref.neighbors().len() > 1 {
-                            continue;
+                    if let Some(value_per_minute_at) =
+                        most_value_per_minute_at.get(&neighbor_ref.name())
+                    {
+                        let mut new_steps = steps.clone();
+                        new_steps.push(neighbor_ref.name());
+                        if *value_per_minute_at <= value_per_minute {
+                            heap.push(State {
+                                time: time + 1,
+                                total_value: total_value + value_per_minute,
+                                value_per_minute: value_per_minute,
+                                position: Rc::clone(&neighbor),
+                                opened_valves: opened_valves.clone(),
+                                previous_valve_name: Some(position_ref.name()),
+                                steps: new_steps,
+                            });
+                            most_value_per_minute_at.insert(neighbor_ref.name(), value_per_minute);
                         }
                     }
-                    let total_flow = neighbor_ref.neighbors_remaining_flow(&opened_valves)
-                        + if !opened_valves.contains(&neighbor_ref.name()) {
-                            neighbor_ref.flow_rate()
-                        } else {
-                            0
-                        };
-                    // We continue through the neighbor with the best flow
-                    if current_max_flow <= total_flow {
-                        neighbors_with_max_flow.push(Rc::clone(&neighbor));
-                        current_max_flow = total_flow;
-                    }
                 }
-            }
-            for neighbor in neighbors_with_max_flow.iter() {
-                heap.push(State {
-                    time: time + 1,
-                    total_value: total_value + value_per_minute,
-                    value_per_minute: value_per_minute,
-                    position: Rc::clone(&neighbor),
-                    opened_valves: opened_valves.clone(),
-                    previous_valve_name: Some(position_ref.name()),
-                });
             }
         }
     }
@@ -122,7 +134,7 @@ mod tests {
         const MAX_TIME: i32 = 30;
         const EXPECTED_SCORE: i32 = 1651;
         let valves = create_valves();
-        let best_path_score = get_best_path(&valves[0], MAX_TIME);
+        let best_path_score = get_best_path(&valves[0], &valves, MAX_TIME);
         assert!(best_path_score.is_some(), "Obtained None value!");
         if let Some(score) = best_path_score {
             assert_eq!(score, EXPECTED_SCORE);
