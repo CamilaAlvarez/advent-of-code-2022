@@ -1,20 +1,10 @@
-use super::valve::Valve;
+use super::state::{PositionAtTime, PositionAtValveKey, State, ValueAtTime};
+use crate::valve::Valve;
 use std::{
     cell::RefCell,
     collections::{BinaryHeap, HashMap},
     rc::Rc,
 };
-
-#[derive(PartialEq, Eq)]
-struct State {
-    time: i32,
-    total_value: i32,
-    value_per_minute: i32,
-    position: Rc<RefCell<Valve>>,
-    opened_valves: Vec<String>,
-    previous_valve_name: Option<String>,
-    steps: Vec<String>,
-}
 
 pub fn get_best_path(
     start: &Rc<RefCell<Valve>>,
@@ -26,17 +16,17 @@ pub fn get_best_path(
     let mut most_value_per_minute_at = HashMap::new();
     for valve in valves.iter() {
         let borrowed_valve = valve.borrow();
-        most_value_per_minute_at.insert(borrowed_valve.name(), i32::MIN);
+        let key = PositionAtValveKey::new_single_key(borrowed_valve.name());
+        most_value_per_minute_at.insert(key, i32::MIN);
     }
     let borrowed_start = start.borrow();
     //most_value_per_minute_at.insert(borrowed_start.name(), 0);
     heap.push(State {
         time: 0,
         total_value: 0,
-        value_per_minute: 0,
-        position: Rc::clone(start),
+        value_per_minute: ValueAtTime::Single(0),
+        position: PositionAtTime::Single(Rc::clone(start)),
         opened_valves: vec![],
-        previous_valve_name: None,
         steps: vec![borrowed_start.name()],
     });
     // All performed operations must be included in the heap, we just try to maximize the score obtained by increasing the timer 30 times
@@ -46,61 +36,63 @@ pub fn get_best_path(
         value_per_minute,
         position,
         opened_valves,
-        previous_valve_name,
         steps,
     }) = heap.pop()
     {
         if time >= max_time {
             return Some(total_value);
-        } else {
+        }
+        if let PositionAtTime::Single(position) = position {
             let position_ref = position.borrow();
             // we can open the valve and consume an extra minute
             if !opened_valves.contains(&position_ref.name()) && position_ref.can_be_opened() {
-                let mut check_opened_valves = opened_valves.clone();
-                if let Some(previous_valve) = &previous_valve_name {
-                    check_opened_valves.push(previous_valve.clone());
-                }
                 let mut new_steps = steps.clone();
                 new_steps.push(position_ref.name());
-                if let Some(value_per_minute_at) =
-                    most_value_per_minute_at.get(&position_ref.name())
+                if let Some(value_per_minute_at) = most_value_per_minute_at
+                    .get(&PositionAtValveKey::new_single_key(position_ref.name()))
                 {
-                    if *value_per_minute_at <= total_value + value_per_minute {
-                        let mut opened_valves = opened_valves.clone();
-                        opened_valves.push(position_ref.name());
-                        heap.push(State {
-                            time: time + 1,
-                            total_value: total_value + value_per_minute,
-                            value_per_minute: value_per_minute + position_ref.flow_rate(),
-                            position: Rc::clone(&position),
-                            opened_valves,
-                            previous_valve_name: previous_valve_name.clone(),
-                            steps: new_steps,
-                        });
+                    if let ValueAtTime::Single(value_per_minute) = value_per_minute {
+                        if *value_per_minute_at <= total_value + value_per_minute {
+                            let mut opened_valves = opened_valves.clone();
+                            opened_valves.push(position_ref.name());
+                            heap.push(State {
+                                time: time + 1,
+                                total_value: total_value + value_per_minute,
+                                value_per_minute: ValueAtTime::Single(
+                                    value_per_minute + position_ref.flow_rate(),
+                                ),
+                                position: PositionAtTime::Single(Rc::clone(&position)),
+                                opened_valves,
+                                steps: new_steps,
+                            });
+                        }
                     }
-                    //}
                 }
             }
             // Or we can move to the best neighbor we place both alternatives
             for neighbor in position_ref.neighbors().iter() {
                 if let Some(neighbor) = neighbor.upgrade() {
                     let neighbor_ref = neighbor.borrow();
-                    if let Some(value_per_minute_at) =
-                        most_value_per_minute_at.get(&neighbor_ref.name())
+                    if let Some(value_per_minute_at) = most_value_per_minute_at
+                        .get(&PositionAtValveKey::new_single_key(neighbor_ref.name()))
                     {
                         let mut new_steps = steps.clone();
                         new_steps.push(neighbor_ref.name());
-                        if *value_per_minute_at <= value_per_minute {
-                            heap.push(State {
-                                time: time + 1,
-                                total_value: total_value + value_per_minute,
-                                value_per_minute: value_per_minute,
-                                position: Rc::clone(&neighbor),
-                                opened_valves: opened_valves.clone(),
-                                previous_valve_name: Some(position_ref.name()),
-                                steps: new_steps,
-                            });
-                            most_value_per_minute_at.insert(neighbor_ref.name(), value_per_minute);
+                        if let ValueAtTime::Single(value_per_minute) = value_per_minute {
+                            if *value_per_minute_at <= value_per_minute {
+                                heap.push(State {
+                                    time: time + 1,
+                                    total_value: total_value + value_per_minute,
+                                    value_per_minute: ValueAtTime::Single(value_per_minute),
+                                    position: PositionAtTime::Single(Rc::clone(&neighbor)),
+                                    opened_valves: opened_valves.clone(),
+                                    steps: new_steps,
+                                });
+                                most_value_per_minute_at.insert(
+                                    PositionAtValveKey::new_single_key(neighbor_ref.name()),
+                                    value_per_minute,
+                                );
+                            }
                         }
                     }
                 }
@@ -108,21 +100,6 @@ pub fn get_best_path(
         }
     }
     None
-}
-
-impl Ord for State {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        return other
-            .time
-            .cmp(&self.time)
-            .then_with(|| self.total_value.cmp(&other.total_value))
-            .then_with(|| self.value_per_minute.cmp(&other.value_per_minute));
-    }
-}
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 #[cfg(test)]
