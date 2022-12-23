@@ -52,6 +52,9 @@ pub fn get_best_path(
                     .get(&PositionAtValveKey::new_single_key(position_ref.name()))
                 {
                     if let ValueAtTime::Single(value_per_minute) = value_per_minute {
+                        println!("per minutes store: {}", value_per_minute_at);
+                        println!("per minutes : {}", value_per_minute);
+                        println!("total: {}", total_value + value_per_minute);
                         if *value_per_minute_at <= total_value + value_per_minute {
                             let mut opened_valves = opened_valves.clone();
                             opened_valves.push(position_ref.name());
@@ -65,6 +68,10 @@ pub fn get_best_path(
                                 opened_valves,
                                 steps: new_steps,
                             });
+                            most_value_per_minute_at.insert(
+                                PositionAtValveKey::new_single_key(position_ref.name()),
+                                value_per_minute,
+                            );
                         }
                     }
                 }

@@ -508,7 +508,7 @@ fn add_step_to_heap(
 mod tests {
     use super::*;
 
-    #[test]
+    //#[test]
     fn test_get_path_value() {
         const MAX_TIME: i32 = 26;
         const EXPECTED_SCORE: i32 = 1707;
