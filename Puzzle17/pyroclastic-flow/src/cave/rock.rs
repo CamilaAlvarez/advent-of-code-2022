@@ -1,4 +1,5 @@
-use super::{BoundingBox, Point};
+use crate::point::{BoundingBox, Point};
+#[derive(Debug, PartialEq, Eq)]
 pub struct Rock {
     pieces: Vec<Point>,
     bounding_box: BoundingBox,
@@ -19,6 +20,24 @@ impl Rock {
             pieces.push(*piece + self.bounding_box.top_left());
         }
         pieces
+    }
+    pub fn width(&self) -> usize {
+        self.bounding_box.width()
+    }
+    pub fn height(&self) -> usize {
+        self.bounding_box.height()
+    }
+    pub fn top(&self) -> i32 {
+        self.bounding_box.top_left().y()
+    }
+    pub fn bottom(&self) -> i32 {
+        self.bounding_box.bottom_right().y()
+    }
+    pub fn left(&self) -> i32 {
+        self.bounding_box.top_left().x()
+    }
+    pub fn right(&self) -> i32 {
+        self.bounding_box.bottom_right().x()
     }
 }
 
