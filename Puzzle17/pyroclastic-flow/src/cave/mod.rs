@@ -31,8 +31,9 @@ impl Cave {
         }
         0
     }
-    pub fn spawn_and_move_new_rock(&mut self) {
+    pub fn spawn_and_move_new_rock(&mut self) -> usize {
         let next_shape = self.shape_iterator.next();
+        let mut number_jet_iterations = 0;
         if let Some(shape) = next_shape {
             let origin_y = self.height() + Y_FROM_TOP;
             let mut rock = shape.spawn_rock(Point::new(X_ORIGIN as i32, origin_y));
@@ -41,6 +42,7 @@ impl Cave {
             let mut x_movement: i32 = 0;
             let y_movement: i32 = -Y_FROM_TOP;
             for _ in 0..Y_FROM_TOP {
+                number_jet_iterations += 1;
                 match self.jet_pattern.next() {
                     Some(JetDirection::Left) if rock.left() + x_movement > 0 => x_movement -= 1,
                     Some(JetDirection::Right) if rock.right() + x_movement < MAX_CAVE_INDEX => {
@@ -86,7 +88,7 @@ impl Cave {
                     }
                     _ => {}
                 }
-
+                number_jet_iterations += 1;
                 // 2. check if the next downwards position of the rock collides with another rock, or if it reached the ground
                 let rock_bottom = rock.bottom();
                 if rock_bottom <= 0 {
@@ -116,6 +118,7 @@ impl Cave {
                 }
             }
         }
+        number_jet_iterations
     }
 }
 #[cfg(test)]
