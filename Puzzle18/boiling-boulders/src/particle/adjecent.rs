@@ -120,7 +120,9 @@ impl AdjecencyMap {
         min_z: ParticleCoord,
         max_z: ParticleCoord,
     ) -> i32 {
+        // we need to check that the air pockets are actually pockets
         let position_with_particles = self.position_with_particles.borrow();
+        let mut air_adjacency_count = 0;
         for i in min_x + 1..max_x {
             if let Some(y_map) = position_with_particles.get(&i) {
                 for j in min_y + 1..max_y {
@@ -131,7 +133,7 @@ impl AdjecencyMap {
                                     if let Some(y_map) = self.possible_adjecent_points.get(&i) {
                                         if let Some(z_map) = y_map.get(&j) {
                                             if let Some(count) = z_map.get(&k) {
-                                                return count.clone();
+                                                air_adjacency_count += count.clone();
                                             }
                                         }
                                     }
@@ -142,7 +144,7 @@ impl AdjecencyMap {
                 }
             }
         }
-        0
+        air_adjacency_count
     }
 }
 #[cfg(test)]

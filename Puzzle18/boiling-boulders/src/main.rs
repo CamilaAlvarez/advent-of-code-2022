@@ -1,5 +1,6 @@
 use boiling_boulders::particle::adjecent::AdjecencyMap;
 use boiling_boulders::particle::parser;
+use boiling_boulders::particle::Particle;
 use clap::Parser;
 use std::fs;
 
@@ -8,6 +9,8 @@ use std::fs;
 struct Args {
     #[arg(short, long)]
     input: String,
+    #[arg(action, short, long)]
+    remove_air_pockets: bool,
 }
 // We'll try the following
 // 1. Go over the list once to create a list with all possible adjacent cubes for all particles (might be a series of maps to make it faster to access),
@@ -30,6 +33,17 @@ fn main() {
         // For each interesection there will be two points we'll check, so we don't have to multiply by two
         visible_sides -= adjacency_map.number_of_particles_adjacent_to(*particle);
     }
-    // 4. Return visible_sides
+    if args.remove_air_pockets {
+        let min_x = Particle::get_min_x(&particles);
+        let min_y = Particle::get_min_y(&particles);
+        let min_z = Particle::get_min_z(&particles);
+        let max_x = Particle::get_max_x(&particles);
+        let max_y = Particle::get_max_y(&particles);
+        let max_z = Particle::get_max_z(&particles);
+        visible_sides -= adjacency_map.number_of_particles_adjacent_to_inner_air_pockets(
+            min_x, max_x, min_y, max_y, min_z, max_z,
+        );
+    }
+    // 4/5. Return visible_sides
     println!("Visible sides: {}", visible_sides);
 }
