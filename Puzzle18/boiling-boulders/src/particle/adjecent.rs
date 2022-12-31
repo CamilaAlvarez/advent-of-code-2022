@@ -1,10 +1,14 @@
 use super::{Particle, ParticleCoord};
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 enum PositionType {
     Particle,
     Air,
+    ExternalAir,
 }
 pub struct AdjecencyMap {
     // we encode x, y, z with the help of sub-hashmaps
@@ -120,6 +124,8 @@ impl AdjecencyMap {
         min_z: ParticleCoord,
         max_z: ParticleCoord,
     ) -> i32 {
+        // First we're going to start at 0,0,0 and mark all directly accesible pockets of air as external air
+        self.mark_external_pockets_of_air(max_x, max_y, max_z);
         // we need to check that the air pockets are actually pockets
         let position_with_particles = self.position_with_particles.borrow();
         let mut air_adjacency_count = 0;
@@ -129,6 +135,7 @@ impl AdjecencyMap {
                     if let Some(z_map) = y_map.get(&j) {
                         for k in min_z + 1..max_z {
                             if let Some(position_type) = z_map.get(&k) {
+                                // spaces left as air have to be inside
                                 if position_type == &PositionType::Air {
                                     if let Some(y_map) = self.possible_adjecent_points.get(&i) {
                                         if let Some(z_map) = y_map.get(&j) {
@@ -145,6 +152,74 @@ impl AdjecencyMap {
             }
         }
         air_adjacency_count
+    }
+
+    fn mark_external_pockets_of_air(&self, max_x: i32, max_y: i32, max_z: i32) {
+        let mut position_queue = VecDeque::new();
+        position_queue.push_back(Particle::new(0, 0, 0));
+        while !position_queue.is_empty() {
+            if let Some(position) = position_queue.pop_front() {
+                {
+                    let position_with_particles = self.position_with_particles.borrow();
+                    // If the spot hasn't been visited yet we still add its neighbors
+                    if let Some(x_plus_y_map) = position_with_particles.get(&position.x()) {
+                        if let Some(x_plus_z_map) = x_plus_y_map.get(&position.y()) {
+                            if let Some(current_position_type) = x_plus_z_map.get(&position.z()) {
+                                // if the position was labeled as air we keep going
+                                if current_position_type == &PositionType::Air {
+                                    add_to_queue(
+                                        position,
+                                        max_x,
+                                        &mut position_queue,
+                                        max_y,
+                                        max_z,
+                                    );
+                                }
+                            } else {
+                                add_to_queue(position, max_x, &mut position_queue, max_y, max_z);
+                            }
+                        } else {
+                            add_to_queue(position, max_x, &mut position_queue, max_y, max_z);
+                        }
+                    } else {
+                        add_to_queue(position, max_x, &mut position_queue, max_y, max_z);
+                    }
+                }
+                self.add_position_type_with(
+                    position.x(),
+                    position.y(),
+                    position.z(),
+                    PositionType::ExternalAir,
+                );
+            }
+        }
+    }
+}
+
+fn add_to_queue(
+    position: Particle,
+    max_x: i32,
+    position_queue: &mut VecDeque<Particle>,
+    max_y: i32,
+    max_z: i32,
+) {
+    if position.x() < max_x {
+        position_queue.push_back(Particle::new(position.x() + 1, position.y(), position.z()));
+    }
+    if position.x() > 0 {
+        position_queue.push_back(Particle::new(position.x() - 1, position.y(), position.z()));
+    }
+    if position.y() < max_y {
+        position_queue.push_back(Particle::new(position.x(), position.y() + 1, position.z()));
+    }
+    if position.y() > 0 {
+        position_queue.push_back(Particle::new(position.x(), position.y() - 1, position.z()));
+    }
+    if position.z() < max_z {
+        position_queue.push_back(Particle::new(position.x(), position.y(), position.z() + 1));
+    }
+    if position.z() > 0 {
+        position_queue.push_back(Particle::new(position.x(), position.y(), position.z() - 1));
     }
 }
 #[cfg(test)]
